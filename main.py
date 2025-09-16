@@ -252,33 +252,95 @@ class LogAtividade:
 
     # ===================== Timeline =====================
     def atualizar_canvas(self):
+        """
+        Atualiza a linha do tempo e os totais de horas.
+        - Calcula horas ativas, ociosas e total do dia selecionado.
+        - Atualiza as cores do canvas.
+        - Atualiza label de status.
+        """
         hoje = self.data_selecionada
+
+        # ===================== Consulta de horas totais =====================
+        try:
+            row = self.db.executar("""
+                SELECT
+                    printf('%02d:%02d',
+                        CAST(SUM((julianday(COALESCE(data_hora_final, DATETIME('now', 'localtime'))) - julianday(data_hora)) * 24) AS INTEGER),
+                        CAST((SUM((julianday(COALESCE(data_hora_final, DATETIME('now', 'localtime'))) - julianday(data_hora)) * 24) * 60) % 60 AS INTEGER)
+                    ) AS horas_totais,
+
+                    printf('%02d:%02d',
+                        CAST(SUM(CASE WHEN status = 'Ativo' THEN (julianday(COALESCE(data_hora_final, DATETIME('now', 'localtime'))) - julianday(data_hora)) * 24 ELSE 0 END) AS INTEGER),
+                        CAST((SUM(CASE WHEN status = 'Ativo' THEN (julianday(COALESCE(data_hora_final, DATETIME('now', 'localtime'))) - julianday(data_hora)) * 24 ELSE 0 END) * 60) % 60 AS INTEGER)
+                    ) AS horas_ativas,
+
+                    printf('%02d:%02d',
+                        CAST(SUM(CASE WHEN status = 'Ocioso' THEN (julianday(COALESCE(data_hora_final, DATETIME('now', 'localtime'))) - julianday(data_hora)) * 24 ELSE 0 END) AS INTEGER),
+                        CAST((SUM(CASE WHEN status = 'Ocioso' THEN (julianday(COALESCE(data_hora_final, DATETIME('now', 'localtime'))) - julianday(data_hora)) * 24 ELSE 0 END) * 60) % 60 AS INTEGER)
+                    ) AS horas_ociosas,
+
+                    ROUND(
+                        100.0 * SUM(CASE WHEN status = 'Ocioso' THEN (julianday(COALESCE(data_hora_final, DATETIME('now', 'localtime'))) - julianday(data_hora)) * 24 ELSE 0 END)
+                        / SUM((julianday(COALESCE(data_hora_final, DATETIME('now', 'localtime'))) - julianday(data_hora)) * 24), 2
+                    ) AS percentual_horas_ociosas
+                FROM log_atividade
+                WHERE date(data_hora) = ?
+            """, (hoje.strftime("%Y-%m-%d"), ), fetch=True)
+
+            if row and len(row) > 0:
+                horas_totais, horas_ativas, horas_ociosas, pct_ociosas = row[0]
+            else:
+                horas_totais = horas_ativas = horas_ociosas = "00:00"
+                pct_ociosas = 0
+
+        except Exception as e:
+            # Evita crash se a query falhar
+            print(f"[ERRO] Falha ao calcular horas: {e}")
+            horas_totais = horas_ativas = horas_ociosas = "00:00"
+            pct_ociosas = 0
+
+        # ===================== Atualiza timeline visual =====================
         try:
             rows = self.db.executar("""
-                SELECT status, data_hora, COALESCE(data_hora_final, DATETIME('now', 'localtime'))
+                SELECT status, data_hora, COALESCE(data_hora_final, DATETIME('now', 'localtime')) AS data_hora_final
                 FROM log_atividade
             """, fetch=True) or []
 
+            # Inicializa cores (cinza = sem atividade)
             colors = ["gray"] * 1440
+
             for status, dh_inicio, dh_fim in rows:
                 inicio = datetime.strptime(dh_inicio, "%Y-%m-%d %H:%M:%S")
                 fim = datetime.strptime(dh_fim, "%Y-%m-%d %H:%M:%S")
                 if inicio.date() != hoje:
                     continue
-                cor = "green" if status == "Ativo" else "red"
-                for i in range(inicio.hour * 60 + inicio.minute, fim.hour * 60 + fim.minute + 1):
-                    if 0 <= i < 1440: colors[i] = cor
 
-            # Azul claro entre 08h-18h
+                min_inicio = inicio.hour * 60 + inicio.minute
+                min_fim = fim.hour * 60 + fim.minute
+                cor = "green" if status == "Ativo" else "red"
+
+                for i in range(min_inicio, min_fim + 1):
+                    if 0 <= i < 1440:
+                        colors[i] = cor
+
+            # Azul claro 08h-18h para blocos cinza
             for minuto in range(8*60, 18*60):
                 if colors[minuto] == "gray":
                     colors[minuto] = "lightblue"
 
+            # Atualiza canvas
             for x, color in enumerate(colors):
                 self.canvas.itemconfig(self.rects[x], fill=color)
+
         except Exception as e:
             print(f"[ERRO] Falha ao atualizar canvas: {e}")
 
+        # ===================== Atualiza label de status =====================
+        self.label_status.config(
+            text=f"Total: {horas_totais} - Ativo: {horas_ativas} - Ocioso: {horas_ociosas} ({pct_ociosas}% ocioso)"
+        )
+
+        # Próxima atualização
         self.root.after(1000, self.atualizar_canvas)
 
     # ===================== Monitoramento =====================
