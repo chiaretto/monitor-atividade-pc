@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   release:
-    types: [created]   # Dispara somente quando uma nova release é criada
+    types: [created]
 
 jobs:
   build:
@@ -19,7 +19,7 @@ jobs:
       - name: Configura Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"  # ou a versão que você deseja usar
+          python-version: "3.11"
 
       - name: Instalar dependências
         run: |
@@ -65,10 +65,22 @@ jobs:
       - name: Listar arquivos baixados
         run: ls -R ./release_builds
 
+      - name: Montar release notes
+        id: notes
+        run: |
+          echo "body=### Downloads disponíveis 🚀" >> $GITHUB_OUTPUT
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "### Downloads disponíveis 🚀" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "- [Windows](https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/atividade-windows.exe)" >> $GITHUB_OUTPUT
+          echo "- [macOS](https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/atividade-macos.zip)" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Upload binários para release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             release_builds/**/*
+          body: ${{ steps.notes.outputs.body }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
