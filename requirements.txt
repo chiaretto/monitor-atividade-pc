@@ -1,0 +1,24 @@
+# --- Requisitos principais ---
+
+# Biblioteca para criação de executáveis standalone (não precisa em runtime, só no build)
+pyinstaller>=6.0.0  
+
+# Widgets extras de calendário para Tkinter
+tkcalendar>=1.6.1  
+
+# Manipulação de imagens (necessário para ícones e tray)
+Pillow>=10.0.0  
+
+# Criar ícone de system tray multiplataforma
+pystray>=0.19.5  
+
+# Gerenciar processos ativos e janelas do sistema
+psutil>=6.0.0  
+
+# Integração com janelas no Windows
+pywin32>=306; platform_system == "Windows"
+
+# --- Observações ---
+# - Tkinter já vem com Python (não precisa instalar separadamente).
+# - pyinstaller não é obrigatório para rodar, apenas para gerar binários.
+# - No macOS/Linux, a dependência pywin32 é ignorada (condicional).
