@@ -1,0 +1,74 @@
+name: Build and Release
+
+on:
+  release:
+    types: [created]   # Dispara somente quando uma nova release é criada
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configura Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # ou a versão que você deseja usar
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build executável
+        run: |
+          pyinstaller --onefile --noconsole main.py
+        shell: bash
+
+      - name: Renomear binário
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            mv dist/main.exe atividade-windows.exe
+          else
+            mv dist/main atividade-macos
+            zip -r atividade-macos.zip atividade-macos
+          fi
+        shell: bash
+
+      - name: Upload artefato do job
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}
+          path: |
+            atividade-windows.exe
+            atividade-macos.zip
+          if-no-files-found: ignore
+
+  release:
+    name: Publicar na Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar artefatos
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release_builds
+
+      - name: Listar arquivos baixados
+        run: ls -R ./release_builds
+
+      - name: Upload binários para release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release_builds/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
